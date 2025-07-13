@@ -36,15 +36,16 @@ window.bloodTestApp = (function() {
     function loadData(data) {
         data = data || {};
         records = data.records || [];
-        patientIdInput.value = data.patientId || ''; // 患者IDはmain.jsから受け取る
+        // 患者IDは、App1で入力された氏名などから自動生成・取得するのが望ましいが、ここでは簡易的にIDを渡す
+        const patientName = window.chartSupportApp.getData().name || "Unknown";
+        patientIdInput.value = `Patient: ${patientName}`;
         renderDataList();
     }
 
     // データ書き出し
     function getData() {
         return {
-            records: records,
-            patientId: patientIdInput.value
+            records: records
         };
     }
     
@@ -99,7 +100,6 @@ window.bloodTestApp = (function() {
             }
         });
         
-        // 検査日を今日に設定
         const testDateInput = document.getElementById('test-date-app3');
         if (testDateInput) {
             testDateInput.valueAsDate = new Date();
@@ -128,6 +128,9 @@ window.bloodTestApp = (function() {
         itemsContainer.addEventListener('keydown', handleArrowKeys);
         itemsContainer.addEventListener('input', handleInput);
         
+        // ★★★ クリックで自動入力するイベントリスナーを追加 ★★★ここと、、、
+        itemsContainer.addEventListener('click', handleAutoFillOnClick);
+        
         form.addEventListener('submit', (e) => {
             e.preventDefault();
             const data = {
@@ -146,7 +149,6 @@ window.bloodTestApp = (function() {
             renderDataList();
             form.reset();
             document.querySelectorAll('#app3 input.abnormal').forEach(el => el.classList.remove('abnormal'));
-            // 検査日を再度今日に設定
             document.getElementById('test-date-app3').valueAsDate = new Date();
         });
         
@@ -182,20 +184,54 @@ window.bloodTestApp = (function() {
         inputOrder.push(input);
     }
     
-    function handleArrowKeys(e) {
-        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            const input = e.target;
-            if (input.type === 'number') {
-                e.preventDefault();
-                const item = findItemById(input.dataset.itemId);
-                if (!item) return;
-                let value = parseFloat(input.value) || 0;
-                value += (e.key === 'ArrowUp' ? item.step : -item.step);
-                input.value = parseFloat(value.toFixed(10));
+    // ★★★ 自動入力の処理 ★★★、、、ここを削除すればクリック時の入力欄は空欄のまま
+    function handleAutoFillOnClick(e) {
+        const input = e.target;
+        if (input.type === 'number' && !input.value) {
+            const item = findItemById(input.dataset.itemId);
+            if (item) {
+                input.value = item.min; // 基準値の下限を入力
                 checkAbnormality(input, item);
+                // イベントの伝播を止めて、意図しない動作を防ぐ
+                e.stopPropagation(); 
             }
         }
     }
+
+    /////まだうまくいっていない部分/////
+   function handleArrowKeys(e) {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const input = e.target;
+        if (input.type === 'number') {
+            e.preventDefault();
+            const item = findItemById(input.dataset.itemId);
+            if (!item) return;
+
+            // ★★★ 正しいロジックに修正 ★★★
+            if (input.value === '') {
+                // 1. 入力欄が空の場合、最初のキー入力で「下限値」をセットする
+                input.value = item.min;
+            } else {
+                // 2. 入力欄に既に値がある場合、その値を基準に増減させる
+                let value = parseFloat(input.value);
+                const step = item.step || 1;
+                // 小数点以下の桁数を取得して精度を保つ
+                const precision = (step.toString().split('.')[1] || []).length;
+
+                if (e.key === 'ArrowUp') {
+                    value += step;
+                } else if (e.key === 'ArrowDown') {
+                    value -= step;
+                }
+                input.value = parseFloat(value.toFixed(precision));
+            }
+
+            // 値の変更後に、正常値かどうかをチェックする
+            checkAbnormality(input, item);
+        }
+    }
+}
+    
 
     function handleInput(e) {
         const input = e.target;
